@@ -102,7 +102,7 @@
         margin-top: 15px;
       }
 
-      /* MAIN APP - Width increased for Grid */
+      /* MAIN APP */
       .app-container {
         max-width: 1200px;
         margin: 0 auto;
@@ -110,7 +110,6 @@
         display: none;
       }
 
-      /* THE GRID - This makes cards sit side-by-side */
       #feed {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -118,7 +117,6 @@
         margin-top: 30px;
       }
 
-      /* CARDS - Professional White Design */
       .card {
         background: #ffffff !important;
         color: #1a202c !important;
@@ -137,7 +135,6 @@
         grid-column: 1 / -1;
       }
 
-      /* INPUTS & BUTTONS */
       input,
       textarea {
         width: 100%;
@@ -171,7 +168,6 @@
         color: #000;
       }
 
-      /* REFINED PRO TYPOGRAPHY */
       .post-title {
         font-size: 1.3rem !important;
         font-weight: 700 !important;
@@ -180,7 +176,6 @@
         color: #1a202c !important;
       }
 
-      /* Subtle Action Buttons */
       .actions {
         display: flex;
         justify-content: space-around;
@@ -202,7 +197,6 @@
         color: var(--primary) !important;
       }
 
-      /* Comment section to match white cards */
       .comment-section {
         background: #f8fafc !important;
         border: 1px solid #e2e8f0 !important;
@@ -213,7 +207,6 @@
         margin-top: 10px;
       }
 
-      /* CHAT & COMMENTS */
       #chat-window {
         height: 200px;
         overflow-y: auto;
@@ -416,7 +409,6 @@
     </div>
 
     <script type="module">
-      // 1. IMPORTS
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js";
       import {
         getAuth,
@@ -438,7 +430,6 @@
         arrayUnion,
       } from "https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js";
 
-      // 2. CONFIGURATION
       const firebaseConfig = {
         apiKey: "AIzaSyDNVcHBANIh8me9u0J8hcX6y--Wu2fxaOE",
         authDomain: "stockinsight-a1d54.firebaseapp.com",
@@ -449,15 +440,23 @@
         measurementId: "G-7XBH8L2DH6",
       };
 
-      // 3. INITIALIZE
       const app = initializeApp(firebaseConfig);
       const auth = getAuth(app);
       const db = getFirestore(app);
 
-      // 4. AUTH STATE VARIABLES
       let isLoginMode = true;
 
-      // 5. GLOBAL FUNCTIONS
+      // PASTE YOUR NEW GROQ API KEY HERE (Starts with gsk_...)
+      let GROQ_API_KEY = "gsk_placeholder_key_here";
+      try {
+        if (
+          typeof import.meta !== "undefined" &&
+          import.meta.env &&
+          import.meta.env.VITE_GROQ_API_KEY
+        ) {
+          GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+        }
+      } catch (e) {}
 
       // --- AUTH LOGIC ---
       window.toggleAuth = () => {
@@ -499,7 +498,6 @@
 
       window.logout = () => signOut(auth);
 
-      // --- AUTH LISTENER ---
       onAuthStateChanged(auth, (user) => {
         if (user) {
           document.getElementById("auth-screen").style.display = "none";
@@ -515,7 +513,6 @@
         }
       });
 
-      // --- POST LOGIC ---
       window.createPost = async () => {
         const title = document.getElementById("post-title").value;
         const content = document.getElementById("post-content").value;
@@ -614,7 +611,6 @@
         });
       }
 
-      // --- INTERACTION FUNCTIONS ---
       window.likePost = (id) =>
         updateDoc(doc(db, "posts", id), {
           likes: arrayUnion(auth.currentUser.uid),
@@ -649,20 +645,16 @@
         input.value = "";
       };
 
-      // --- AI CHATBOT LOGIC ---
       window.askAI = async () => {
         const inputEl = document.getElementById("ai-input");
         const chatWin = document.getElementById("chat-window");
         const question = inputEl.value;
         if (!question) return;
 
-        // Put your actual Groq API Key here during testing
-        const GROQ_API_KEY = "YOUR_GROQ_API_KEY_HERE";
-
         chatWin.innerHTML += `<div style="color:white; margin:10px 0; border-left: 3px solid #ccc; padding-left: 10px;"><b>You:</b> ${question}</div>`;
         inputEl.value = "";
         const loadingId = "ai-loading-" + Date.now();
-        chatWin.innerHTML += `<div id="${loadingId}" style="color: #00d2ff; font-style: italic; margin-bottom: 10px;">Groq is processing...</div>`;
+        chatWin.innerHTML += `<div id="${loadingId}" style="color: #00d2ff; font-style: italic; margin-bottom: 10px;">Groq is thinking...</div>`;
         chatWin.scrollTop = chatWin.scrollHeight;
 
         try {
@@ -675,7 +667,7 @@
                 "Content-Type": "application/json",
               },
               body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
+                model: "openai/gpt-oss-20b", // Updated model ID guaranteed to work on Groq free/dev tiers
                 messages: [
                   {
                     role: "system",
@@ -689,19 +681,32 @@
             },
           );
           const data = await response.json();
-          document.getElementById(loadingId).remove();
-          if (data.choices && data.choices[0]) {
+          const loadingEl = document.getElementById(loadingId);
+          if (loadingEl) loadingEl.remove();
+
+          if (!response.ok) {
+            throw new Error(
+              `API Error ${response.status}: ${data.error?.message || response.statusText}`,
+            );
+          }
+
+          if (data.choices && data.choices[0] && data.choices[0].message) {
             const aiText = data.choices[0].message.content;
             chatWin.innerHTML += `<div style="color: #00d2ff; margin-bottom: 20px;"><b>AI:</b> ${aiText}</div>`;
+          } else {
+            throw new Error("Unexpected API response format");
           }
         } catch (err) {
-          document.getElementById(loadingId).innerHTML =
-            "<b style='color:red;'>Error:</b> Check API key.";
+          const loadingEl = document.getElementById(loadingId);
+          if (loadingEl) loadingEl.remove();
+          chatWin.innerHTML += `<div style="color:#ff5f57; margin-bottom: 20px; padding: 10px; background:#2d1b1b; border-radius: 8px;"><b>Error:</b> ${
+            err.message || "Failed to get AI response. Check your API key."
+          }</div>`;
+          console.error("Groq API error:", err);
         }
         chatWin.scrollTop = chatWin.scrollHeight;
       };
 
-      // --- TRENDING LOGIC ---
       window.sortTrending = async () => {
         const { getDocs } =
           await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js");
@@ -736,7 +741,6 @@
         }
       };
 
-      // --- VIEW COUNTER ---
       window.addView = async (postId) => {
         const { increment } =
           await import("https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js");
