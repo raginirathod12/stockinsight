@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>StockInsight | Pro Financial Terminal</title>
     <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>"
+    />
+    <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap"
       rel="stylesheet"
     />
@@ -444,19 +448,11 @@
       const auth = getAuth(app);
       const db = getFirestore(app);
 
-      let isLoginMode = true;
+      // ⚠️ CHANGE THIS TO YOUR CLOUDFLARE WORKER URL
+      const WORKER_URL =
+        "https://stockinsight-ai.ragini-rathod-2025.workers.dev/";
 
-      // PASTE YOUR NEW GROQ API KEY HERE (Starts with gsk_...)
-      let GROQ_API_KEY = "gsk_placeholder_key_here";
-      try {
-        if (
-          typeof import.meta !== "undefined" &&
-          import.meta.env &&
-          import.meta.env.VITE_GROQ_API_KEY
-        ) {
-          GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-        }
-      } catch (e) {}
+      let isLoginMode = true;
 
       // --- AUTH LOGIC ---
       window.toggleAuth = () => {
@@ -645,6 +641,7 @@
         input.value = "";
       };
 
+      // --- AI VIA CLOUDFLARE WORKER ---
       window.askAI = async () => {
         const inputEl = document.getElementById("ai-input");
         const chatWin = document.getElementById("chat-window");
@@ -654,55 +651,30 @@
         chatWin.innerHTML += `<div style="color:white; margin:10px 0; border-left: 3px solid #ccc; padding-left: 10px;"><b>You:</b> ${question}</div>`;
         inputEl.value = "";
         const loadingId = "ai-loading-" + Date.now();
-        chatWin.innerHTML += `<div id="${loadingId}" style="color: #00d2ff; font-style: italic; margin-bottom: 10px;">Groq is thinking...</div>`;
+        chatWin.innerHTML += `<div id="${loadingId}" style="color: #00d2ff; font-style: italic; margin-bottom: 10px;">Thinking...</div>`;
         chatWin.scrollTop = chatWin.scrollHeight;
 
         try {
-          const response = await fetch(
-            "https://api.groq.com/openai/v1/chat/completions",
-            {
-              method: "POST",
-              headers: {
-                Authorization: `Bearer ${GROQ_API_KEY}`,
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                model: "openai/gpt-oss-20b", // Updated model ID guaranteed to work on Groq free/dev tiers
-                messages: [
-                  {
-                    role: "system",
-                    content:
-                      "You are a helpful financial assistant for StockInsight.",
-                  },
-                  { role: "user", content: question },
-                ],
-                temperature: 0.7,
-              }),
-            },
-          );
+          const response = await fetch(WORKER_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question: question }),
+          });
+
           const data = await response.json();
           const loadingEl = document.getElementById(loadingId);
           if (loadingEl) loadingEl.remove();
 
           if (!response.ok) {
-            throw new Error(
-              `API Error ${response.status}: ${data.error?.message || response.statusText}`,
-            );
+            throw new Error(data.error || `API Error ${response.status}`);
           }
 
-          if (data.choices && data.choices[0] && data.choices[0].message) {
-            const aiText = data.choices[0].message.content;
-            chatWin.innerHTML += `<div style="color: #00d2ff; margin-bottom: 20px;"><b>AI:</b> ${aiText}</div>`;
-          } else {
-            throw new Error("Unexpected API response format");
-          }
+          chatWin.innerHTML += `<div style="color: #00d2ff; margin-bottom: 20px;"><b>AI:</b> ${data.answer}</div>`;
         } catch (err) {
           const loadingEl = document.getElementById(loadingId);
           if (loadingEl) loadingEl.remove();
-          chatWin.innerHTML += `<div style="color:#ff5f57; margin-bottom: 20px; padding: 10px; background:#2d1b1b; border-radius: 8px;"><b>Error:</b> ${
-            err.message || "Failed to get AI response. Check your API key."
-          }</div>`;
-          console.error("Groq API error:", err);
+          chatWin.innerHTML += `<div style="color:#ff5f57; margin-bottom: 20px; padding: 10px; background:#2d1b1b; border-radius: 8px;"><b>Error:</b> ${err.message}</div>`;
+          console.error("AI error:", err);
         }
         chatWin.scrollTop = chatWin.scrollHeight;
       };
